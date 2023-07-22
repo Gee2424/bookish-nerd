@@ -2,7 +2,7 @@ import requests
 import sqlite3
 from tkinter import *
 from tkinter import messagebox
-import json
+import urllib.parse
 
 class BookFinder:
     def __init__(self, root):
@@ -12,14 +12,11 @@ class BookFinder:
         self.favorites_db = "favorites.db"
         self.cache = {}
 
-        Label(self.root, text="Enter an ISBN:").pack()
+        Label(self.root, text="Enter a book title:").pack()
 
-        self.isbn_var = StringVar()
-        self.entry = Entry(self.root, width=50, textvariable=self.isbn_var)
+        self.title_var = StringVar()
+        self.entry = Entry(self.root, width=50, textvariable=self.title_var)
         self.entry.pack()
-
-        self.isbn_length_var = StringVar(value="10")
-        Spinbox(self.root, from_=10, to=13, textvariable=self.isbn_length_var).pack()
 
         Label(self.root, text="Select a subject for book suggestions:").pack()
         self.subjects_var = StringVar(value=["Science", "Fiction", "History"])
@@ -47,23 +44,20 @@ class BookFinder:
         y = (screen_height/2) - (height/2)
         self.root.geometry('%dx%d+%d+%d' % (width, height, x, y))
 
-    def validate_isbn(self, isbn):
-        return isbn.isdigit() and len(isbn) == int(self.isbn_length_var.get())
-
     def search_books(self):
-        query = self.isbn_var.get()
-        if not self.validate_isbn(query):
-            messagebox.showerror("Invalid ISBN", "Please enter a valid ISBN.")
+        query = self.title_var.get().strip()
+        if not query:
+            messagebox.showerror("Invalid input", "Please enter a valid book title.")
             return
         self.listbox.delete(0, END)
         if query in self.cache:
             self.display_books(self.cache[query])
         else:
             try:
-                response = requests.get(f"https://openlibrary.org/api/books?bibkeys=ISBN:{query}&format=json&jscmd=data")
+                response = requests.get(f"https://openlibrary.org/search.json?title={urllib.parse.quote(query)}")
                 response.raise_for_status()
 
-                books = response.json()
+                books = response.json()['docs'][:5]  # Limit to top 5 results
                 self.cache[query] = books
                 self.display_books(books)
             except requests.HTTPError as http_err:
@@ -74,9 +68,9 @@ class BookFinder:
                 messagebox.showerror("Error", f"An unexpected error occurred: {e}")
 
     def display_books(self, books):
-        for book in books.values():
-            self.listbox.insert(END, f'Title: {book["title"]}')
-            self.listbox.insert(END, f'Author: {book["authors"][0]["name"]}')
+        for book in books:
+            self.listbox.insert(END, f'Title: {book.get("title", "N/A")}')
+            self.listbox.insert(END, f'Author: {", ".join(book.get("author_name", ["N/A"]))}')
             self.listbox.insert(END, '')
 
     def add_to_favorites(self):
